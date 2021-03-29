@@ -1,6 +1,5 @@
 #include <environment/runEnvironment.hpp>
-#include <iostream>
-#include <mathFunctions/parsedFunction.hpp>
+#include <mathFunctions/functionFactory.hpp>
 #include <memory>
 #include <mesh/boxMesh.hpp>
 #include <monitors/flow/hdf5OutputFlow.hpp>
@@ -74,11 +73,11 @@ int main(int argc, char **argv) {
             parameters,
             std::vector<std::shared_ptr<ablate::flow::FlowFieldSolution>>{
                 std::make_shared<ablate::flow::FlowFieldSolution>(
-                    "velocity", std::make_shared<ablate::mathFunctions::ParsedFunction>("t + x^2 + y^2, t + 2*x^2 - x*y"), std::make_shared<ablate::mathFunctions::ParsedFunction>("1.0, 1.0")),
+                    "velocity", ablate::mathFunctions::Create("t + x^2 + y^2, t + 2*x^2 - x*y"), ablate::mathFunctions::Create("1.0, 1.0")),
                 std::make_shared<ablate::flow::FlowFieldSolution>(
-                    "pressure", std::make_shared<ablate::mathFunctions::ParsedFunction>("x + y - 1"), std::make_shared<ablate::mathFunctions::ParsedFunction>("1.0")),
+                    "pressure", ablate::mathFunctions::Create("x + y - 1"), ablate::mathFunctions::Create("1.0")),
                 std::make_shared<ablate::flow::FlowFieldSolution>(
-                    "temperature", std::make_shared<ablate::mathFunctions::ParsedFunction>("t + x + y"), std::make_shared<ablate::mathFunctions::ParsedFunction>("1.0")),
+                    "temperature", ablate::mathFunctions::Create("t + x + y"), ablate::mathFunctions::Create("1.0")),
             },
             std::vector<std::shared_ptr<ablate::flow::BoundaryCondition>>{
                 std::make_shared<ablate::flow::BoundaryCondition>(
@@ -86,10 +85,14 @@ int main(int argc, char **argv) {
                     "wall velocity",
                     "marker",
                     1,
-                    std::make_shared<ablate::mathFunctions::ParsedFunction>("t + x^2 + y^2, t + 2*x^2 - x*y"),
-                    std::make_shared<ablate::mathFunctions::ParsedFunction>("1.0, 1.0")),
+                    ablate::mathFunctions::Create([](PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar* u, auto ctx ){
+                        u[0] = time + x[0]*x[0] + x[1]*x[1];
+                        u[1] = time + 2*x[0]*x[0] - x[0]*x[1];
+                        return 0;
+                    }),/**example showing lambda input**/
+                    ablate::mathFunctions::Create("1.0, 1.0")),
                 std::make_shared<ablate::flow::BoundaryCondition>(
-                    "temperature", "wall temp", "marker", 1, std::make_shared<ablate::mathFunctions::ParsedFunction>("t + x + y + z"), std::make_shared<ablate::mathFunctions::ParsedFunction>("1.0"))},
+                    "temperature", "wall temp", "marker", 1, ablate::mathFunctions::Create("t + x + y + z"), ablate::mathFunctions::Create("1.0"))},
             std::vector<std::shared_ptr<ablate::flow::FlowFieldSolution>>{});
 
         // assume one flow field right now
