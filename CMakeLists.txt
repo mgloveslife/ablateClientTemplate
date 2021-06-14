@@ -14,7 +14,7 @@ if("${ABLATE_PATH}" STREQUAL "")
     FetchContent_Declare(
             ablate
             GIT_REPOSITORY https://github.com/UBCHREST/ablate.git
-            GIT_TAG v0.2.6
+            GIT_TAG v0.4.0
     )
     FetchContent_MakeAvailable(ablate)
 
@@ -24,7 +24,7 @@ else()
 endif()
 
 # Set the project details
-project(ablateClientTemplate VERSION 0.0.1)
+project(ablateClientTemplate VERSION 0.0.2)
 
 # Set the c/c++ Standards
 set(CMAKE_C_STANDARD 99)
@@ -36,6 +36,5 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_executable(ablateLibraryClient ablateLibraryClient.cpp)
 target_link_libraries(ablateLibraryClient PUBLIC ablateLibrary)
 
-# define the two sample programs
-add_executable(ablateCoreClient ablateCoreClient.c)
-target_link_libraries(ablateCoreClient PUBLIC ablateCore)
+add_executable(mixingPETScAblate mixingPETScAblate.cpp)
+target_link_libraries(mixingPETScAblate PUBLIC ablateLibrary)
