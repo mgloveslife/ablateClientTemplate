@@ -1,116 +1,144 @@
+#include <petsc.h>
 #include <environment/runEnvironment.hpp>
-#include <flow/boundaryConditions/essential.hpp>
 #include <mathFunctions/functionFactory.hpp>
 #include <memory>
 #include "builder.hpp"
-#include "flow/flow.hpp"
-#include "flow/incompressibleFlow.hpp"
-#include "mesh/boxMesh.hpp"
-#include "monitors/hdf5Monitor.hpp"
+#include "domain/boxMesh.hpp"
+#include "domain/modifiers/distributeWithGhostCells.hpp"
+#include "domain/modifiers/ghostBoundaryCells.hpp"
+#include "domain/modifiers/setFromOptions.hpp"
+#include "eos/perfectGas.hpp"
+#include "finiteVolume/boundaryConditions/ghost.hpp"
+#include "finiteVolume/compressibleFlowFields.hpp"
+#include "finiteVolume/compressibleFlowSolver.hpp"
+#include "finiteVolume/fluxCalculator/ausm.hpp"
+#include "io/interval/fixedInterval.hpp"
+#include "monitors/curveMonitor.hpp"
 #include "monitors/timeStepMonitor.hpp"
 #include "parameters/mapParameters.hpp"
-#include "solve/timeStepper.hpp"
-#include "utilities/petscOptions.hpp"
 
-int main(int argc, char** argv) {
+typedef struct {
+    PetscReal gamma;
+    PetscReal length;
+    PetscReal rhoL;
+    PetscReal uL;
+    PetscReal pL;
+    PetscReal rhoR;
+    PetscReal uR;
+    PetscReal pR;
+} InitialConditions;
+
+static PetscErrorCode SetInitialCondition(PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar *u, void *ctx) {
+    InitialConditions *initialConditions = (InitialConditions *)ctx;
+
+    if (x[0] < initialConditions->length / 2.0) {
+        u[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoL;
+        u[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoL * initialConditions->uL;
+
+        PetscReal e = initialConditions->pL / ((initialConditions->gamma - 1.0) * initialConditions->rhoL);
+        PetscReal et = e + 0.5 * PetscSqr(initialConditions->uL);
+        u[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoL;
+
+    } else {
+        u[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoR;
+        u[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoR * initialConditions->uR;
+
+        PetscReal e = initialConditions->pR / ((initialConditions->gamma - 1.0) * initialConditions->rhoR);
+        PetscReal et = e + 0.5 * PetscSqr(initialConditions->uR);
+        u[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoR;
+    }
+
+    return 0;
+}
+
+static PetscErrorCode PhysicsBoundary_Euler(PetscReal time, const PetscReal *c, const PetscReal *n, const PetscScalar *a_xI, PetscScalar *a_xG, void *ctx) {
+    InitialConditions *initialConditions = (InitialConditions *)ctx;
+
+    if (c[0] < initialConditions->length / 2.0) {
+        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoL;
+
+        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoL * initialConditions->uL;
+
+        PetscReal e = initialConditions->pL / ((initialConditions->gamma - 1.0) * initialConditions->rhoL);
+        PetscReal et = e + 0.5 * PetscSqr(initialConditions->uL);
+        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoL;
+    } else {
+        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoR;
+
+        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoR * initialConditions->uR;
+
+        PetscReal e = initialConditions->pR / ((initialConditions->gamma - 1.0) * initialConditions->rhoR);
+        PetscReal et = e + 0.5 * PetscSqr(initialConditions->uR);
+        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoR;
+    }
+    return 0;
+    PetscFunctionReturn(0);
+}
+
+int main(int argc, char **argv) {
     // initialize petsc and mpi
-    PetscErrorCode ierr = PetscInitialize(&argc, &argv, NULL, NULL);
-    CHKERRABORT(PETSC_COMM_WORLD, ierr);
-
+    PetscInitialize(&argc, &argv, nullptr, nullptr) >> ablate::checkError;
     {
+        // define some initial conditions
+        InitialConditions initialConditions{.gamma = 1.4, .length = 1.0, .rhoL = 1.0, .uL = 0.0, .pL = 1.0, .rhoR = 0.125, .uR = 0.0, .pR = .1};
+
         // setup the run environment
         ablate::parameters::MapParameters runEnvironmentParameters(std::map<std::string, std::string>{{"title", "clientExample"}});
         ablate::environment::RunEnvironment::Setup(runEnvironmentParameters);
 
-        // setup any global arguments
-        ablate::utilities::PetscOptionsUtils::Set({{"dm_plex_separate_marker", ""}, {"vel_petscspace_degree", "3"}, {"pres_petscspace_degree", "2"}, {"temp_petscspace_degree", "2"}});
+        auto eos = std::make_shared<ablate::eos::PerfectGas>(std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{{"gamma", "1.4"}}));
+
+        // determine required fields for finite volume compressible flow
+        std::vector<std::shared_ptr<ablate::domain::FieldDescriptor>> fieldDescriptors = {std::make_shared<ablate::finiteVolume::CompressibleFlowFields>(eos)};
+
+        auto domain = std::make_shared<ablate::domain::BoxMesh>(
+            "simpleMesh",
+            fieldDescriptors,
+            std::vector<std::shared_ptr<ablate::domain::modifiers::Modifier>>{
+                std::make_shared<ablate::domain::modifiers::SetFromOptions>(std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{
+                    {"dm_refine", "2"},
+                    {"dm_distribute", ""},
+                })),
+                std::make_shared<ablate::domain::modifiers::DistributeWithGhostCells>(),
+                std::make_shared<ablate::domain::modifiers::GhostBoundaryCells>()},
+            std::vector<int>{100},
+            std::vector<double>{0.0},
+            std::vector<double>{initialConditions.length},
+            std::vector<std::string>{"NONE"} /*boundary*/,
+            false /*simplex*/);
+
+        // Setup the flow data
+        auto parameters = std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{{"cfl", ".4"}});
+
+        // Set the initial conditions for euler
+        auto initialCondition = std::make_shared<ablate::mathFunctions::FieldFunction>("euler", ablate::mathFunctions::Create(SetInitialCondition, (void *)&initialConditions));
 
         // create a time stepper
-        auto timeStepper = ablate::solve::TimeStepper("timeStepper",
-                                                      {{"ts_dt", ".01"},
-                                                       {"ts_max_steps", "15"},
-                                                       {"ksp_type", "fgmres"},
-                                                       {"ksp_gmres_restart", "10"},
-                                                       {"ksp_rtol", "1.0e-9"},
-                                                       {"ksp_atol", "1.0e-14"},
-                                                       {"ksp_error_if_not_converged", ""},
-                                                       {"pc_type", "fieldsplit"},
-                                                       {"pc_fieldsplit_0_fields", "0,2"},
-                                                       {"pc_fieldsplit_1_fields", "1"},
-                                                       {"pc_fieldsplit_type", "schur"},
-                                                       {"pc_fieldsplit_schur_factorization_type", "full"},
-                                                       {"fieldsplit_0_pc_type", "lu"},
-                                                       {"fieldsplit_pressure_ksp_rtol", "1E-10"},
-                                                       {"fieldsplit_pressure_ksp_atol", "1E-12"},
-                                                       {"fieldsplit_pressure_pc_type", "jacobi"}});
+        auto timeStepper = ablate::solver::TimeStepper("timeStepper", domain, {{"ts_adapt_type", "none"}, {"ts_max_steps", "600"}, {"ts_dt", "0.00000625"}}, {}, {initialCondition});
 
-        auto mesh = std::make_shared<ablate::mesh::BoxMesh>("simpleMesh",
-                                                            std::vector<int>{2, 3},
-                                                            std::vector<double>{.1, .1},
-                                                            std::vector<double>{.2, .2},
-                                                            std::vector<std::string>{} /*boundary*/,
-                                                            true /*simplex*/,
-                                                            std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{
-                                                                {"dm_refine", "0"},
-                                                            }));
+        auto boundaryConditions = std::vector<std::shared_ptr<ablate::finiteVolume::boundaryConditions::BoundaryCondition>>{
+            std::make_shared<ablate::finiteVolume::boundaryConditions::Ghost>("euler", "wall left", 1, PhysicsBoundary_Euler, (void *)&initialConditions),
+            std::make_shared<ablate::finiteVolume::boundaryConditions::Ghost>("euler", "wall right", 2, PhysicsBoundary_Euler, (void *)&initialConditions)};
 
-        // setup a flow parameters
-        auto parameters = std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{{"strouhal", "1.0"},
-                                                                                                                 {"reynolds", "33149.2"},
-                                                                                                                 {"peclet", "23469.3"},
-                                                                                                                 {"froude", "0.451754"},
-                                                                                                                 {"heatRelease", "0.0"},
-                                                                                                                 {"gamma", "0.0"},
-                                                                                                                 {"pth", "1.0"},
-                                                                                                                 {"beta", "0.0"},
-                                                                                                                 {"mu", "1.0"},
-                                                                                                                 {"k", "1.0"},
-                                                                                                                 {"cp", "1.0"},
-                                                                                                                 {"gravityDirection", "1"}});
+        // Create a shockTube solver
+        auto shockTubeSolver = std::make_shared<ablate::finiteVolume::CompressibleFlowSolver>("compressibleShockTube",
+                                                                                              ablate::domain::Region::ENTIREDOMAIN,
+                                                                                              nullptr /*options*/,
+                                                                                              eos,
+                                                                                              parameters,
+                                                                                              nullptr /*transportModel*/,
+                                                                                              std::make_shared<ablate::finiteVolume::fluxCalculator::Ausm>(),
+                                                                                              boundaryConditions /*boundary conditions*/,
+                                                                                              true /*physics time step*/);
 
-        // create a simple flow
-        auto flow = std::make_shared<ablate::flow::IncompressibleFlow>(
-            "FlowField",
-            mesh,
-            parameters,
-            /* petsc options*/
-            nullptr,
-            /* init functions */
-            std::vector<std::shared_ptr<ablate::mathFunctions::FieldSolution>>{
-                std::make_shared<ablate::mathFunctions::FieldSolution>("velocity", ablate::mathFunctions::Create("t + x^2 + y^2, t + 2*x^2 - x*y"), ablate::mathFunctions::Create("1.0, 1.0")),
-                std::make_shared<ablate::mathFunctions::FieldSolution>("pressure", ablate::mathFunctions::Create("x + y - 1"), ablate::mathFunctions::Create("1.0")),
-                std::make_shared<ablate::mathFunctions::FieldSolution>("temperature", ablate::mathFunctions::Create("t + x + y"), ablate::mathFunctions::Create("1.0")),
-            },
-            /* boundary conditions*/
-            std::vector<std::shared_ptr<ablate::flow::boundaryConditions::BoundaryCondition>>{
-                std::make_shared<ablate::flow::boundaryConditions::Essential>(
-                    "velocity",
-                    "wall velocity",
-                    "marker",
-                    std::vector<int>{1},
-                    ablate::mathFunctions::Create([](PetscInt dim, PetscReal time, const PetscReal x[], PetscInt Nf, PetscScalar* u, auto ctx) {
-                        u[0] = time + x[0] * x[0] + x[1] * x[1];
-                        u[1] = time + 2 * x[0] * x[0] - x[0] * x[1];
-                        return 0;
-                    }), /**example showing lambda input**/
-                    ablate::mathFunctions::Create("1.0, 1.0")),
-                std::make_shared<ablate::flow::boundaryConditions::Essential>(
-                    "temperature", "wall temp", "marker", 1, ablate::mathFunctions::Create("t + x + y + z"), ablate::mathFunctions::Create("1.0"))});
+        // register the flowSolver with the timeStepper
+        timeStepper.Register(
+            shockTubeSolver,
+            {std::make_shared<ablate::monitors::TimeStepMonitor>(), std::make_shared<ablate::monitors::CurveMonitor>(std::make_shared<ablate::io::interval::FixedInterval>(10), "outputCurve")});
 
-        // assume one flow field right now
-        flow->SetupSolve(timeStepper.GetTS());
-
-        // setup monitors
-        auto hdf5Monitor = std::make_shared<ablate::monitors::Hdf5Monitor>();
-        hdf5Monitor->Register(flow);
-        timeStepper.AddMonitor(hdf5Monitor);
-
-        auto monitor = std::make_shared<ablate::monitors::TimeStepMonitor>();
-        monitor->Register(flow);
-        timeStepper.AddMonitor(monitor);
-
-        // run
-        timeStepper.Solve(flow);
+        // Solve the time stepper
+        timeStepper.Solve();
     }
+
     return PetscFinalize();
 }
