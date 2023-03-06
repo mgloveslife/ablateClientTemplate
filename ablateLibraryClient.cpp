@@ -6,7 +6,6 @@
 #include "domain/boxMesh.hpp"
 #include "domain/modifiers/distributeWithGhostCells.hpp"
 #include "domain/modifiers/ghostBoundaryCells.hpp"
-#include "domain/modifiers/setFromOptions.hpp"
 #include "eos/perfectGas.hpp"
 #include "finiteVolume/boundaryConditions/ghost.hpp"
 #include "finiteVolume/compressibleFlowFields.hpp"
@@ -16,6 +15,7 @@
 #include "monitors/curveMonitor.hpp"
 #include "monitors/timeStepMonitor.hpp"
 #include "parameters/mapParameters.hpp"
+#include "utilities/petscUtilities.hpp"
 
 typedef struct {
     PetscReal gamma;
@@ -77,7 +77,9 @@ static PetscErrorCode PhysicsBoundary_Euler(PetscReal time, const PetscReal *c, 
 
 int main(int argc, char **argv) {
     // initialize petsc and mpi
-    PetscInitialize(&argc, &argv, nullptr, nullptr) >> ablate::checkError;
+    ablate::environment::RunEnvironment::Initialize(&argc, &argv);
+    ablate::utilities::PetscUtilities::Initialize();
+
     {
         // define some initial conditions
         InitialConditions initialConditions{.gamma = 1.4, .length = 1.0, .rhoL = 1.0, .uL = 0.0, .pL = 1.0, .rhoR = 0.125, .uR = 0.0, .pR = .1};
@@ -91,30 +93,27 @@ int main(int argc, char **argv) {
         // determine required fields for finite volume compressible flow
         std::vector<std::shared_ptr<ablate::domain::FieldDescriptor>> fieldDescriptors = {std::make_shared<ablate::finiteVolume::CompressibleFlowFields>(eos)};
 
-        auto domain = std::make_shared<ablate::domain::BoxMesh>(
-            "simpleMesh",
-            fieldDescriptors,
-            std::vector<std::shared_ptr<ablate::domain::modifiers::Modifier>>{
-                std::make_shared<ablate::domain::modifiers::SetFromOptions>(std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{
-                    {"dm_refine", "2"},
-                    {"dm_distribute", ""},
-                })),
-                std::make_shared<ablate::domain::modifiers::DistributeWithGhostCells>(),
-                std::make_shared<ablate::domain::modifiers::GhostBoundaryCells>()},
-            std::vector<int>{100},
-            std::vector<double>{0.0},
-            std::vector<double>{initialConditions.length},
-            std::vector<std::string>{"NONE"} /*boundary*/,
-            false /*simplex*/);
+        auto domain =
+            std::make_shared<ablate::domain::BoxMesh>("simpleMesh",
+                                                      fieldDescriptors,
+                                                      std::vector<std::shared_ptr<ablate::domain::modifiers::Modifier>>{std::make_shared<ablate::domain::modifiers::DistributeWithGhostCells>(),
+                                                                                                                        std::make_shared<ablate::domain::modifiers::GhostBoundaryCells>()},
+                                                      std::vector<int>{100},
+                                                      std::vector<double>{0.0},
+                                                      std::vector<double>{initialConditions.length},
+                                                      std::vector<std::string>{"NONE"} /*boundary*/,
+                                                      false /*simplex*/,
+                                                      ablate::parameters::MapParameters::Create({{"dm_refine", "2"}, {"dm_distribute", ""}}));
 
-        // Setup the flow data
+        // Set up the flow data
         auto parameters = std::make_shared<ablate::parameters::MapParameters>(std::map<std::string, std::string>{{"cfl", ".4"}});
 
         // Set the initial conditions for euler
         auto initialCondition = std::make_shared<ablate::mathFunctions::FieldFunction>("euler", ablate::mathFunctions::Create(SetInitialCondition, (void *)&initialConditions));
 
         // create a time stepper
-        auto timeStepper = ablate::solver::TimeStepper("timeStepper", domain, {{"ts_adapt_type", "none"}, {"ts_max_steps", "600"}, {"ts_dt", "0.00000625"}}, {}, {initialCondition});
+        auto timeStepper = ablate::solver::TimeStepper(
+            domain, ablate::parameters::MapParameters::Create({{"ts_adapt_type", "physicsConstrained"}, {"ts_max_steps", "600"}, {"ts_dt", "0.00000625"}}), {}, {initialCondition});
 
         auto boundaryConditions = std::vector<std::shared_ptr<ablate::finiteVolume::boundaryConditions::BoundaryCondition>>{
             std::make_shared<ablate::finiteVolume::boundaryConditions::Ghost>("euler", "wall left", 1, PhysicsBoundary_Euler, (void *)&initialConditions),
@@ -128,8 +127,7 @@ int main(int argc, char **argv) {
                                                                                               parameters,
                                                                                               nullptr /*transportModel*/,
                                                                                               std::make_shared<ablate::finiteVolume::fluxCalculator::Ausm>(),
-                                                                                              boundaryConditions /*boundary conditions*/,
-                                                                                              true /*physics time step*/);
+                                                                                              boundaryConditions /*boundary conditions*/);
 
         // register the flowSolver with the timeStepper
         timeStepper.Register(
@@ -140,5 +138,6 @@ int main(int argc, char **argv) {
         timeStepper.Solve();
     }
 
-    return PetscFinalize();
+    ablate::environment::RunEnvironment::Finalize();
+    return 0;
 }

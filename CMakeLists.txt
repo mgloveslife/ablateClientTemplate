@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.18.4)
 
 # FetContent will allow downloading of other libraries
 include(FetchContent)
@@ -14,7 +14,7 @@ if("${ABLATE_PATH}" STREQUAL "")
     FetchContent_Declare(
             ablate
             GIT_REPOSITORY https://github.com/UBCHREST/ablate.git
-            GIT_TAG v0.8.0
+            GIT_TAG v0.10.39
     )
     FetchContent_MakeAvailable(ablate)
 
