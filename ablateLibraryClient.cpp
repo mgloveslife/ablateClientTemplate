@@ -112,8 +112,10 @@ int main(int argc, char **argv) {
         auto initialCondition = std::make_shared<ablate::mathFunctions::FieldFunction>("euler", ablate::mathFunctions::Create(SetInitialCondition, (void *)&initialConditions));
 
         // create a time stepper
-        auto timeStepper = ablate::solver::TimeStepper(
-            domain, ablate::parameters::MapParameters::Create({{"ts_adapt_type", "physicsConstrained"}, {"ts_max_steps", "600"}, {"ts_dt", "0.00000625"}}), {}, {initialCondition});
+        auto timeStepper = ablate::solver::TimeStepper(domain,
+                                                       ablate::parameters::MapParameters::Create({{"ts_adapt_type", "physicsConstrained"}, {"ts_max_steps", "600"}, {"ts_dt", "0.00000625"}}),
+                                                       {},
+                                                       std::make_shared<ablate::domain::Initializer>(initialCondition));
 
         auto boundaryConditions = std::vector<std::shared_ptr<ablate::finiteVolume::boundaryConditions::BoundaryCondition>>{
             std::make_shared<ablate::finiteVolume::boundaryConditions::Ghost>("euler", "wall left", 1, PhysicsBoundary_Euler, (void *)&initialConditions),
