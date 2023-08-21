@@ -157,8 +157,8 @@ int main(int argc, char **argv) {
         ablate::parameters::MapParameters runEnvironmentParameters(
                 std::map<std::string, std::string>(
                         {"title", "curvature_AirAir_80x80"}
-                );
-        ablate::environment::RunEnvironment::Setup(runEnvironmentParameters));
+                ));
+        ablate::environment::RunEnvironment::Setup(runEnvironmentParameters);
 
 //        float gamma = 0;
 //        float Rgas = 0;
@@ -210,7 +210,6 @@ int main(int argc, char **argv) {
                                                       ablate::parameters::MapParameters::Create({{"dm_refine", "1"}}));
 
         auto serializer =
-//        ablate::io::Hdf5MultiFileSerializer::Hdf5MultiFileSerializer(std::shared_ptr<ablate::io::interval::Interval> interval, std::shared_ptr<parameters::Parameters> options)
             std::make_shared<ablate::io::Hdf5MultiFileSerializer>(
                     std::shared_ptr<ablate::io::interval::Interval> 0.1);
 
@@ -249,9 +248,6 @@ int main(int argc, char **argv) {
             std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("densityVF", [1,2,3,4], ablate::mathFunctions::boundaryValue("densityvolumeFraction", "1.1614401858304297")),
             std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("vf", [1,2,3,4], ablate::mathFunctions::boundaryValue("volumeFraction", "1.0"))
         };
-//        auto boundaryConditions = std::vector<std::shared_ptr<ablate::finiteVolume::boundaryConditions::BoundaryCondition> >{
-//            std::make_shared<ablate::finiteVolume::boundaryConditions::Ghost>("euler", "wall left", 1, PhysicsBoundary_Euler, (void *)&initialConditions),
-//            std::make_shared<ablate::finiteVolume::boundaryConditions::Ghost>("euler", "wall right", 2, PhysicsBoundary_Euler, (void *)&initialConditions)};
 
         auto processes = std::vector<std::shared_ptr<ablate::finiteVolume::processes::TwoPhaseEulerAdvection> >{ //GG, GL, LG, LL
             eosTwoPhase,
@@ -274,21 +270,12 @@ int main(int argc, char **argv) {
                 )
         }; //also needs ablate::finiteVolume::processes::SurfaceForce
 
-        // bubble solver by mason and joe
         auto flowSolver = std::make_shared<ablate::finiteVolume::FiniteVolumeSolver>("flow solver", //id, region, options/parameters, processes, boundary conditions
                                                                                          ablate::domain::Region::ENTIREDOMAIN,
                                                                                          parameters,
                                                                                          processes,
                                                                                          boundaryConditions)
 
-//        auto shockTubeSolver = std::make_shared<ablate::finiteVolume::CompressibleFlowSolver>("compressibleShockTube",
-//                                                                                              ablate::domain::Region::ENTIREDOMAIN,
-//                                                                                              nullptr /*options*/,
-//                                                                                              eos,
-//                                                                                              parameters,
-//                                                                                              nullptr /*transportModel*/,
-//                                                                                              std::make_shared<ablate::finiteVolume::fluxCalculator::Ausm>(),
-//                                                                                              boundaryConditions /*boundary conditions*/);
 
         // register the flowSolver with the timeStepper
         timeStepper.Register(
