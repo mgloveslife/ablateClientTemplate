@@ -61,6 +61,11 @@ static PetscErrorCode SetInitialCondition(PetscInt dim, PetscScalar time, const 
 static PetscErrorCode PhysicsBoundary_Euler(PetscScalar time, const PetscScalar *c, const PetscScalar *n, const PetscScalar *a_xI, PetscScalar *a_xG, void *ctx) {
     InitialConditions *initialConditions = (InitialConditions *)ctx;
 
+    a_xG[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rho;
+    a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOU] = initialConditions->rho * initialConditions-> vx;
+    a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOV] = initialConditions->rho * initialConditions-> vy;
+    a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOW] = initialConditions->rho * initialConditions-> vz;
+
     return 0;
     PetscFunctionReturn(0);
 }
