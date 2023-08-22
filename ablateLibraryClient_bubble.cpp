@@ -22,100 +22,38 @@
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/fieldFunctions/compressibleFlowState.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/boundaryConditions/essentialGhost.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/solver/timeStepper.hpp"
-#include "/Users/jjmarzia/Desktop/ablate/ablate/src/mathFunctions/fieldFunction.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/mathFunctions/mathFunction.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/finiteVolumeSolver.hpp"
+#include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/processes/Process.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/processes/twoPhaseEulerAdvection.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/eos/twoPhase.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/fluxCalculator/riemannStiff.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/processes/surfaceForce.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/domain/initializer.hpp"
 #include "/Users/jjmarzia/Desktop/ablate/ablate/src/finiteVolume/fieldFunctions/densityVolumeFraction.hpp"
+#include "/Users/jjmarzia/Desktop/ablate/ablate/src/mathFunctions/formula.hpp"
+#include "/Users/jjmarzia/Desktop/ablate/ablate/src/mathFunctions/fieldFunction.hpp"
+#include "/Users/jjmarzia/Desktop/ablate/ablate/src/domain/field.hpp"
+#include "/Users/jjmarzia/Desktop/ablate/ablate/src/io/interval/fixedInterval.hpp"
 
 #include <string>
 #include <iostream>
 
 
 typedef struct {
-    PetscScalar gamma;
-    PetscScalar Rgas;
-//    PetscScalar temperature;
-    PetscScalar pressure;
-//    PetscScalar volumeFraction;
     PetscScalar rho;
-
-
-//    PetscScalar length;
-//    PetscScalar rhoL;
-//    PetscScalar uL;
-//    PetscScalar pL;
-//    PetscScalar rhoR;
-//    PetscScalar uR;
-//    PetscScalar pR;
+    PetscScalar vx;
+    PetscScalar vy;
+    PetscScalar vz;
 } InitialConditions;
 
-static PetscErrorCode SetInitialCondition(PetscInt dim, PetscScalar time, const PetscScalar x[], const PetscScalar y[], PetscInt Nf, PetscScalar *u, void *ctx) {
+static PetscErrorCode SetInitialCondition(PetscInt dim, PetscScalar time, const PetscScalar x[], PetscInt Nf, PetscScalar *u, void *ctx) {
     InitialConditions *initialConditions = (InitialConditions *)ctx;
 
-//    if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1) {
-//        initialConditions->pressure = 1e5 + 0.251036495228486;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.1025) {
-//        initialConditions->pressure = 1e5 + 0.209197079357072;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.21) {
-//        initialConditions->pressure = 1e5+0.167357663485657;           // initialize pressure
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.3225) {
-//        initialConditions->pressure = 1e5+0.125518247614243;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.44) {
-//        initialConditions->pressure = 1e5 + 0.083678831742829;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.5625) {
-//        initialConditions->pressure = 1e5+0.041839415871414;
-//    } else {
-//        initialConditions->pressure = 1e5;
-//    }
-//
-//    if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1) {
-//        initialConditions->volumeFraction = 0;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.1025) {
-//        initialConditions->volumeFraction = 0.166666666666667;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.21) {
-//        initialConditions->volumeFraction = 0.333333333333333;           // initialize vol fraction
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.3225) {
-//        initialConditions->volumeFraction = 0.5;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.44) {
-//        initialConditions->volumeFraction = 0.666666666666667;
-//    } else if (PetscSqr(x[0]) + PetscSqr(y[0]) < 1.5625) {
-//        initialConditions->volumeFraction = 0.833333333333333;
-//    } else {
-//        initialConditions->volumeFraction = 1.0;
-//    }
-
-    PetscScalar u = 0;
-    PetscScalar v = 0;
-    PetscScalar e = initialConditions->pressure / ((initialConditions->gamma - 1.0) * initialConditions->rho);
-    PetscScalar et = e + 0.5 * u * u;
-
-    u[ablate::finiteVolume::CompressibleFlowFields::RHOU] = 0;
-    u[ablate::finiteVolume::CompressibleFlowFields::RHOV] = 0;
-
-//    u[ablate::finiteVolume::CompressibleFlowFields::RHOU] = initialConditions->rho * u;
-//    u[ablate::finiteVolume::CompressibleFlowFields::RHOV] = initialConditions->rho * v;
-
-//    if (x[0] < initialConditions->length / 2.0) {
-//        u[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoL;
-//        u[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoL * initialConditions->uL;
-//
-//        PetscScalar e = initialConditions->pL / ((initialConditions->gamma - 1.0) * initialConditions->rhoL);
-//        PetscScalar et = e + 0.5 * PetscSqr(initialConditions->uL);
-//        u[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoL;
-//
-//    } else {
-//        u[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoR;
-//        u[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoR * initialConditions->uR;
-//
-//        PetscScalar e = initialConditions->pR / ((initialConditions->gamma - 1.0) * initialConditions->rhoR);
-//        PetscScalar et = e + 0.5 * PetscSqr(initialConditions->uR);
-//        u[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoR;
-//    }
+    u[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rho;
+    u[ablate::finiteVolume::CompressibleFlowFields::RHOU] = initialConditions->rho * initialConditions-> vx;
+    u[ablate::finiteVolume::CompressibleFlowFields::RHOV] = initialConditions->rho * initialConditions-> vy;
+    u[ablate::finiteVolume::CompressibleFlowFields::RHOW] = initialConditions->rho * initialConditions-> vz;
 
     return 0;
 }
@@ -123,23 +61,6 @@ static PetscErrorCode SetInitialCondition(PetscInt dim, PetscScalar time, const 
 static PetscErrorCode PhysicsBoundary_Euler(PetscScalar time, const PetscScalar *c, const PetscScalar *n, const PetscScalar *a_xI, PetscScalar *a_xG, void *ctx) {
     InitialConditions *initialConditions = (InitialConditions *)ctx;
 
-//    if (c[0] < initialConditions->length / 2.0) {
-//        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoL;
-//
-//        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoL * initialConditions->uL;
-//
-//        PetscScalar e = initialConditions->pL / ((initialConditions->gamma - 1.0) * initialConditions->rhoL);
-//        PetscScalar et = e + 0.5 * PetscSqr(initialConditions->uL);
-//        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoL;
-//    } else {
-//        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHO] = initialConditions->rhoR;
-//
-//        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOU + 0] = initialConditions->rhoR * initialConditions->uR;
-//
-//        PetscScalar e = initialConditions->pR / ((initialConditions->gamma - 1.0) * initialConditions->rhoR);
-//        PetscScalar et = e + 0.5 * PetscSqr(initialConditions->uR);
-//        a_xG[ablate::finiteVolume::CompressibleFlowFields::RHOE] = et * initialConditions->rhoR;
-//    }
     return 0;
     PetscFunctionReturn(0);
 }
@@ -150,142 +71,170 @@ int main(int argc, char **argv) {
     ablate::utilities::PetscUtilities::Initialize();
 
     {
+
         // define some initial conditions
-        InitialConditions initialConditions;
-
-        // setup the run environment
-        ablate::parameters::MapParameters runEnvironmentParameters(
-                std::map<std::string, std::string>(
-                        {"title", "curvature_AirAir_80x80"}
-                ));
-        ablate::environment::RunEnvironment::Setup(runEnvironmentParameters);
-
-//        float gamma = 0;
-//        float Rgas = 0;
-
-        auto eos = std::make_shared<ablate::eos::PerfectGas>(std::make_shared<ablate::parameters::MapParameters>(
-                std::map<std::string, std::string>(
-                        {{"gamma", "0"}, {"Rgas", "0"}}
-                        )
-                )
-        );
-
-        auto eos1 = std::make_shared<ablate::eos::PerfectGas>( //eosAir
-                std::make_shared<ablate::parameters::MapParameters>(
-                        std::map<std::string, std::string>(
-                                {{"gamma", "1.4"}, {"Rgas", "287.0"}}
-                        )
-                )
-        );
-
-        auto eos2 = std::make_shared<ablate::eos::PerfectGas>( //eosAir
-                std::make_shared<ablate::parameters::MapParameters>(
-                        std::map<std::string, std::string>(
-                                {{"gamma", "1.4"}, {"Rgas", "287.0"}}
-                        )
-                )
-        );
-
-        auto eosTwoPhase = std::make_shared<ablate::eos::TwoPhase>(
-                eos1, eos2
-                );
-
-//        auto conservedFieldParameters = std::make_shared<ablate::parameters::Parameters>()
-
-        // determine required fields for finite volume compressible flow
-        std::vector<std::shared_ptr<ablate::domain::FieldDescriptor> > fieldDescriptors = {std::make_shared<ablate::finiteVolume::CompressibleFlowFields>(
-                eos)};
-
-        auto domain =
-            std::make_shared<ablate::domain::BoxMesh>("simpleBoxField",
-                                                      fieldDescriptors,
-//                                                      fields,
-                                                      std::vector<std::shared_ptr<ablate::domain::modifiers::Modifier> >{std::make_shared<ablate::domain::modifiers::DistributeWithGhostCells>(),
-                                                                                                                        std::make_shared<ablate::domain::modifiers::GhostBoundaryCells>()},
-                                                      std::vector<int>{40}, //faces
-                                                      std::vector<double>{{-2, -2}}, //upper
-                                                      std::vector<double>{{2, 2}}, //lower
-                                                      std::vector<std::string>{"NONE"} /*boundary*/,
-                                                      false /*simplex*/,
-                                                      ablate::parameters::MapParameters::Create({{"dm_refine", "1"}}));
-
-        auto serializer =
-            std::make_shared<ablate::io::Hdf5MultiFileSerializer>(
-                    std::shared_ptr<ablate::io::interval::Interval> 0.1);
-
-        // Set up the flow data
-        auto parameters = std::make_shared<ablate::parameters::MapParameters>(
-                std::map<std::string, std::string>{{"cfl", ".5"}});
-
-        // Set the initial conditions for euler
-        auto initialCondition = std::make_shared<ablate::mathFunctions::FieldFunction>("euler", ablate::mathFunctions::Create(SetInitialCondition, (void *)&initialConditions));
-
-        auto initializer = std::make_shared<ablate::domain::Initializer>(
-                std::make_shared<ablate::finiteVolume::fieldFunctions::Euler>(
-                        ablate::finiteVolume::fieldFunctions::CompressibleFlowState(eosTwoPhase,
-                                                                                    ablate::mathFunctions::ConstantValue(300), //temperature
-                                                                                    ablate::mathFunctions::ConstantValue(10000), //pressure (change to presure gradient later)
-                                                                                    ablate::mathFunctions::ConstantValue(0), //veclocity
-                                                                                    ablate::finiteVolume::fieldFunctions::DensityVolumeFraction(
-                                                                                            eosTwoPhase,
-                                                                                            ablate::domain::Region::ENTIREDOMAIN
-                                                                                            )
-                                                                                    )
-                        )
-                )
-
-        // create a time stepper
-        auto timeStepper = ablate::solver::TimeStepper(domain,
-                                                       ablate::parameters::MapParameters::Create({{"ts_adapt_type", "physicsConstrained"}, {"ts_max_time", "0.5"}, {"ts_dt", "1e-2"}}),
-                                                       serializer,
-                                                       initializer,
-                                                       {},
-                                                       std::make_shared<ablate::domain::Initializer>(initialCondition));
-
-
-        auto boundaryConditions = std::vector<std::shared_ptr<ablate::finiteVolume::boundaryConditions::BoundaryCondition> >{
-            std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("walls", [1,2,3,4], ablate::mathFunctions::boundaryValue("euler", "1.1614401858304297, 1.1614401858304297*215250.0, 0.0, 0.0")),
-            std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("densityVF", [1,2,3,4], ablate::mathFunctions::boundaryValue("densityvolumeFraction", "1.1614401858304297")),
-            std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("vf", [1,2,3,4], ablate::mathFunctions::boundaryValue("volumeFraction", "1.0"))
+        InitialConditions initialConditions {
+            .rho=1,
+            .vx=0,
+            .vy=0,
+            .vz=0
         };
 
-        auto processes = std::vector<std::shared_ptr<ablate::finiteVolume::processes::TwoPhaseEulerAdvection> >{ //GG, GL, LG, LL
-            eosTwoPhase,
-            parameters,
-            ablate::finiteVolume::fluxCalculator::RiemannStiff( //GG
-                eos1,
-                eos2
-                );
-            ablate::finiteVolume::fluxCalculator::RiemannStiff( //GL
-                eos1,
-                eos2
+        // setup the run environment
+
+//        auto runEnvironmentParameters = std::make_shared<ablate::environment::RunEnvironment>
+//                )
+
+        ablate::parameters::MapParameters runEnvironmentParameters(
+                std::map<std::string, std::string>{
+                        {"title", "curvature_AirAir_80x80tt"}
+                }
+        );
+
+        ablate::environment::RunEnvironment::Setup(runEnvironmentParameters);
+
+        auto eos = std::make_shared<ablate::eos::PerfectGas>{
+        ablate::parameters::MapParameters::Create{ ;
+            { "gamma", "0" }, { "Rgas", "0" }
+        }
+        };
+
+//        ablate::parameters::MapParameters::Create(
+//                {"dm_refine", "1"}
+//        )
+
+        auto eos1 = std::make_shared<ablate::eos::PerfectGas>{ //eosAir
+            ablate::parameters::MapParameters::Create(
+                    { "gamma", "1.4" }, { "Rgas", "287.0" }
+                    )
+        };
+
+        auto* eos2 = &eos1;
+
+        auto eosTwoPhase = std::make_shared<ablate::eos::TwoPhase>(
+        eos1, eos2
+        );
+
+        auto fields = std::vector<std::shared_ptr<ablate::domain::FieldDescriptor> >(
+            std::make_shared<ablate::finiteVolume::CompressibleFlowFields>(eos),
+            std::make_shared<ablate::domain::FieldDescription>("densityVolumeFraction",
+                                                               ablate::domain::FieldType("FVM")),
+            std::make_shared<ablate::domain::FieldDescription>("volumeFraction",
+                                                               ablate::domain::FieldType("FVM")),
+            std::make_shared<ablate::domain::FieldDescription>("pressure",
+                                                               ablate::domain::FieldLocation("AUX"),
+                                                               ablate::domain::FieldType("FVM"))
+        );
+
+        auto modifiers = std::vector<std::shared_ptr<ablate::domain::modifiers::Modifier> >(
+            std::make_shared<ablate::domain::modifiers::DistributeWithGhostCells>(1),
+            std::make_shared<ablate::domain::modifiers::GhostBoundaryCells>("Face Sets")
+        );
+
+        auto domain = std::make_shared<ablate::domain::BoxMesh>{"simpleBoxField",
+                                                                fields,
+                                                                modifiers,
+                                                                std::vector<int>({40}), //faces
+                                                                std::vector<double>({-2, 2}), //upper
+                                                                std::vector<double>({-2, 2}), //lower
+                                                                std::vector<std::string>("NONE") /*boundary*/,
+                                                                false /*simplex*/,
+                                                                ablate::parameters::MapParameters::Create(
+                                                                        {"dm_refine", "1"}
+                                                                )
+        };
+
+        auto io = std::make_shared<ablate::io::Hdf5MultiFileSerializer>(
+                    std::make_shared<ablate::io::interval::FixedInterval>(0.1)
+                    );
+
+        // Set up the flow data
+        auto parameters = std::make_shared<ablate::parameters::MapParameters>{
+            std::map<std::string, std::string>(
+                    { "cfl", ".5" }
+                    )
+        };
+
+//         Set the initial conditions for euler
+//        auto initialCondition = std::make_shared<ablate::finiteVolume::fieldFunctions::Euler>("euler", ablate::mathFunctions::Create(SetInitialCondition, (void *)&initialConditions));
+
+        auto initialCondition = std::make_shared<ablate::mathFunctions::FieldFunction>("euler", ablate::mathFunctions::Create(SetInitialCondition, (void *)&initialConditions));
+
+        auto initialization = std::vector<std::shared_ptr<ablate::domain::Initializer> >(
+            std::make_shared<ablate::finiteVolume::fieldFunctions::Euler>(
+                    ablate::finiteVolume::fieldFunctions::CompressibleFlowState(
+                            eosTwoPhase, //flowfieldState (eos1, eos2),
+                            ablate::mathFunctions::ConstantValue(300), //temperature
+                            ablate::mathFunctions::Formula("(x^2+y^2) < 1 ? 1e5+0.251036495228486 : ( (x^2+y^2) < 1.1025  ? 1e5+0.209197079357072 : ( (x^2+y^2) < 1.21 ? 1e5+0.167357663485657 : ( (x^2+y^2) < 1.3225 ? 1e5+0.125518247614243 : ( (x^2+y^2) < 1.44 ? 1e5+0.083678831742829 : ( (x^2+y^2) < 1.5625 ? 1e5+0.041839415871414 : 1e5 )))))"), //pressure gradient
+                            ablate::mathFunctions::ConstantValue(0), //velocity
+                            ablate::mathFunctions::FieldFunction("volumeFraction", ablate::mathFunctions::Formula("(x^2+y^2) < 1 ?  0 : ( (x^2+y^2) < 1.1025  ? 0.166666666666667 : ( (x^2+y^2) < 1.21 ? 0.333333333333333 : ( (x^2+y^2) < 1.3225 ? 0.5 : ( (x^2+y^2) < 1.44 ? 0.666666666666667 : ( (x^2+y^2) < 1.5625 ? 0.833333333333333 : 1.0 )))))"))
+                    )
+            ),
+            std::make_shared<ablate::finiteVolume::fieldFunctions::DensityVolumeFraction>(
+                    eosTwoPhase
+            ),
+            std::make_shared<ablate::mathFunctions::FieldFunction>(
+                    "volumeFraction",
+                    ablate::mathFunctions::Formula("(x^2+y^2) < 1 ?  0 : ( (x^2+y^2) < 1.1025  ? 0.166666666666667 : ( (x^2+y^2) < 1.21 ? 0.333333333333333 : ( (x^2+y^2) < 1.3225 ? 0.5 : ( (x^2+y^2) < 1.44 ? 0.666666666666667 : ( (x^2+y^2) < 1.5625 ? 0.833333333333333 : 1.0 )))))")
+                    )
+        );
+
+        // create a time stepper
+        auto timeStepper = ablate::solver::TimeStepper("theMainTimeStepper",
+                                                       domain,
+                                                       ablate::parameters::MapParameters::Create({"ts_adapt_type", "physicsConstrained"}, {"ts_max_time", "0.5"}, {"ts_dt", "1e-2"}),
+                                                       io,
+                                                       initialization);
+
+
+        auto boundaryConditions = std::vector<std::shared_ptr<ablate::finiteVolume::boundaryConditions::BoundaryCondition> >(
+            std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("walls", std::vector<int>({1,2,3,4}), ablate::mathFunctions::FieldFunction("euler", "1.1614401858304297, 1.1614401858304297*215250.0, 0.0, 0.0")),
+            std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("densityVF", std::vector<int>({1,2,3,4}), ablate::mathFunctions::FieldFunction("densityvolumeFraction", "1.1614401858304297")),
+            std::make_shared<ablate::finiteVolume::boundaryConditions::EssentialGhost>("vf", std::vector<int>({1,2,3,4}), ablate::mathFunctions::FieldFunction("volumeFraction", "1.0"))
+        );
+
+        auto processes = std::vector<std::shared_ptr<ablate::finiteVolume::processes::Process> >( //GG, GL, LG, LL
+                std::make_shared<ablate::finiteVolume::processes::TwoPhaseEulerAdvection>(
+                        eosTwoPhase,
+                        parameters,
+                        ablate::finiteVolume::fluxCalculator::RiemannStiff(
+                                eos1,
+                                eos2
+                        ),
+                        ablate::finiteVolume::fluxCalculator::RiemannStiff(
+                                eos1,
+                                eos2
+                        ),
+                        ablate::finiteVolume::fluxCalculator::RiemannStiff(
+                                eos1,
+                                eos2
+                        ),
+                        ablate::finiteVolume::fluxCalculator::RiemannStiff(
+                                eos1,
+                                eos2
+                        )
                 ),
-            ablate::finiteVolume::fluxCalculator::RiemannStiff( //LG
-                eos1,
-                eos2
-                ),
-            ablate::finiteVolume::fluxCalculator::RiemannStiff( //LL
-                eos1,
-                eos2
+                std::make_shared<ablate::finiteVolume::processes::SurfaceForce>(
+                        1.125
                 )
-        }; //also needs ablate::finiteVolume::processes::SurfaceForce
+        );
 
         auto flowSolver = std::make_shared<ablate::finiteVolume::FiniteVolumeSolver>("flow solver", //id, region, options/parameters, processes, boundary conditions
-                                                                                         ablate::domain::Region::ENTIREDOMAIN,
-                                                                                         parameters,
-                                                                                         processes,
-                                                                                         boundaryConditions)
+                                                                                     ablate::domain::Region::ENTIREDOMAIN,
+                                                                                     processes,
+                                                                                     boundaryConditions
+                                                                                     );
 
 
         // register the flowSolver with the timeStepper
+
         timeStepper.Register(
             flowSolver,
-            {std::make_shared<ablate::monitors::TimeStepMonitor>(), std::make_shared<ablate::monitors::CurveMonitor>(std::make_shared<ablate::io::interval::FixedInterval>(10), "outputCurve")});
-
-        // Solve the time stepper
+            {std::make_shared<ablate::monitors::TimeStepMonitor>(100)}
+            );
         timeStepper.Solve();
     }
 
     ablate::environment::RunEnvironment::Finalize();
     return 0;
-}}
+}
